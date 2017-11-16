@@ -1,4 +1,4 @@
-# Scout
+# Traveling Sailsman
 
 Arguments:
 
