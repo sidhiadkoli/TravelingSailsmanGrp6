@@ -16,8 +16,10 @@ public class Player extends sail.sim.Player {
     public Point chooseStartingLocation(Point wind_direction, Long seed, int t) {
         // you don't have to use seed unless you want it to 
         // be deterministic (wrt input randomness)
-        gen = new Random(seed);
-        initial = new Point(gen.nextDouble()*10, gen.nextDouble()*10);
+        Point bias = Point.rotateCounterClockwise(wind_direction, Math.PI / 2);
+        double bias_x = bias.x * 4;
+        double bias_y = bias.y * 4;
+        initial = new Point(5 + bias_x, 5 + bias_y);
         double speed = Simulator.getSpeed(initial, wind_direction);
         return initial;
     }
@@ -38,19 +40,33 @@ public class Player extends sail.sim.Player {
         // }
         // just for first turn
         if(visited_set == null) {
-            return Point.getDirection(group_locations.get(id), targets.get(0));
-
-        } else if(visited_set.get(id).size() == targets.size()) {
+            double min = 1e9;
+            int mark = 0;
+            for (int i = 0; i < targets.size(); i++) {
+                double dist = Point.getDistance(group_locations.get(id), targets.get(i));
+                if (dist < min) {
+                    min = dist;
+                    mark = i;
+                }
+            }
+            return Point.getDirection(group_locations.get(id), targets.get(mark));
+        }
+        else if(visited_set.get(id).size() == targets.size()) {
             //this is if finished visiting all
             return Point.getDirection(group_locations.get(id), initial);
-        } else { 
-            //pick a target
-            int next = 0;
-            for(; visited_set.get(id).contains(next); ++next);
-            return Point.getDirection(
-                group_locations.get(id),
-                targets.get(next)
-            );
+        }
+        else { 
+            double min = 1e9;
+            int mark = 0;
+            for (int i = 0; i < targets.size(); i++) {
+                if (visited_set.get(id).contains(i)) continue;
+                double dist = Point.getDistance(group_locations.get(id), targets.get(i));
+                if (dist < min) {
+                    min = dist;
+                    mark = i;
+                }
+            }
+            return Point.getDirection(group_locations.get(id), targets.get(mark));
         }
     }
 
