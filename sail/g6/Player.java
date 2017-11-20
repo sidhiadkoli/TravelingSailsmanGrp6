@@ -1,6 +1,5 @@
 package sail.g6;
 
-import com.sun.deploy.util.ArrayUtil;
 import sail.sim.Point;
 import sail.sim.Simulator;
 import java.util.concurrent.TimeUnit;
@@ -17,11 +16,10 @@ public class Player extends sail.sim.Player {
     Point wind;
 
     int nextTarget = -1;
+    int isVisited[][];
 
     @Override
     public Point chooseStartingLocation(Point wind_direction, Long seed, int t) {
-        // you don't have to use seed unless you want it to 
-        // be deterministic (wrt input randomness)
         wind = wind_direction;
         prevLoc = new ArrayList<>();
         path = new ArrayList<>();
@@ -38,66 +36,59 @@ public class Player extends sail.sim.Player {
     public void init(List<Point> group_locations, List<Point> targets, int id) {
         this.targets = targets;
         this.id = id;
+        isVisited = new int[targets.size()][group_locations.size()];
     }
 
     @Override
     public Point move(List<Point> group_locations, int id, double dt, long time_remaining_ms) {
 
-        // Check if we've reached the target.
         if (this.path.size() != 0 && visited_set.get(id).contains(nextTarget)) {
             prevLoc.add(0, path.get(0));
             path.remove(0);
         }
         else if (this.path.size() != 0) {
-            // System.out.println("Moving to set target.");
-
-            // Check if we crossed the intermediate point.
-            // This won't be a target point because that is already checked for in the
-            // first "if".
             if (checkCrossedInterpolation(path.get(0), prevLoc.get(0), group_locations.get(id))) {
                 prevLoc.add(0, path.get(0));
                 path.remove(0);
-                // We are guaranteed that there is another point in "path".
             }
-
-            if (path.size() == 0) {
-                // We should never come here.
-                // If we do, then it means that the first "if" that checks if
-                // we crossed a target is buggy.
-                System.out.println("Whaaaaaa");
-            }
-
-            // Continue moving to the intermediate point or move to the target point.
             return moveInPath(group_locations.get(id), path.get(0));
         }
 
         if(visited_set != null && visited_set.get(id).size() == targets.size()) {
-            // This is if we have finished visiting all targets.
             nextTarget = targets.size();
             return findPathAndMove(group_locations.get(id), initial);
         }
         else {
-            // System.out.println("Selecting next target.");
-
-            // Here is the logic to decide which target to head to next.
-            // Pick the closest target.
+            for (int i = 0; i < targets.size(); i++) {
+                for (int j = 0; j < group_locations.size(); j++) {
+                    if (isVisited[i][j] == 1) continue;
+                    if (Point.getDistance(targets.get(i), group_locations.get(j)) < 0.1) {
+                        isVisited[i][j] = 1;
+                    }
+                }
+            }
             double min = 1e9;
             int mark = 0;
             for (int i = 0; i < targets.size(); i++) {
                 if (visited_set != null && visited_set.get(id).contains(i)) continue;
-                double dist = Point.getDistance(group_locations.get(id), targets.get(i));
+                int count = group_locations.size();
+                for (int j = 0; j < group_locations.size(); j++) {
+                    if (j == id) continue;
+                    if (isVisited[i][j] > 0) {
+                        count--;
+                    }
+                }
+                double dist = getTrueWeight(group_locations.get(id), targets.get(i)) / count;
                 if (dist < min) {
                     min = dist;
                     mark = i;
                 }
             }
-
             nextTarget = mark;
             return findPathAndMove(group_locations.get(id), targets.get(mark));
         }
     }
 
-    // Find the path from current location to the target location.
     public Point findPathAndMove(Point currentLoc, Point nextLoc) {
         ArrayList<Point> grid = getGrid(currentLoc, nextLoc);
 
@@ -115,14 +106,14 @@ public class Player extends sail.sim.Player {
 
         // Direct path is the best path.
         if (minIndex == -1) {
-            System.out.println("Direct path is the best.");
+            //System.out.println("Direct path is the best.");
             path.add(nextLoc);
             return moveInPath(currentLoc, nextLoc);
         }
 
-        System.out.println("Current point: " + currentLoc.x + " " + currentLoc.y);
-        System.out.println("Destination point: " + nextLoc.x + " " + nextLoc.y);
-        System.out.println("Taking a deviation through: " + grid.get(minIndex).x + " " + grid.get(minIndex).y);
+        //System.out.println("Current point: " + currentLoc.x + " " + currentLoc.y);
+        //System.out.println("Destination point: " + nextLoc.x + " " + nextLoc.y);
+        //System.out.println("Taking a deviation through: " + grid.get(minIndex).x + " " + grid.get(minIndex).y);
         path.add(grid.get(minIndex));
         path.add(nextLoc);
 
