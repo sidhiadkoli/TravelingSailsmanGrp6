@@ -43,7 +43,7 @@ def analyzeResults(resultsList, repetition):
     pp.pprint(dict(playerPlacementsDict))
 
 
-repetition = 1000
+repetition = 10
 
 
 
