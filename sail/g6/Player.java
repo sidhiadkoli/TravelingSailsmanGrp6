@@ -16,10 +16,12 @@ public class Player extends sail.sim.Player {
     Point wind;
 
     int nextTarget = -1;
-    int isVisited[][];
+    int[] plan;
 
     @Override
     public Point chooseStartingLocation(Point wind_direction, Long seed, int t) {
+        // you don't have to use seed unless you want it to 
+        // be deterministic (wrt input randomness)
         wind = wind_direction;
         prevLoc = new ArrayList<>();
         path = new ArrayList<>();
@@ -29,6 +31,9 @@ public class Player extends sail.sim.Player {
         initial = new Point(5 + bias_x, 5 + bias_y);
         double speed = Simulator.getSpeed(initial, wind_direction);
         prevLoc.add(0, initial);
+        plan = new int[6];
+        for (int i = 0; i < 6; i++)
+            plan[i] = -1;
         return initial;
     }
 
@@ -36,45 +41,71 @@ public class Player extends sail.sim.Player {
     public void init(List<Point> group_locations, List<Point> targets, int id) {
         this.targets = targets;
         this.id = id;
-        isVisited = new int[targets.size()][group_locations.size()];
     }
 
     @Override
     public Point move(List<Point> group_locations, int id, double dt, long time_remaining_ms) {
 
+        // Check if we've reached the target.
         if (this.path.size() != 0 && visited_set.get(id).contains(nextTarget)) {
             prevLoc.add(0, path.get(0));
             path.remove(0);
         }
         else if (this.path.size() != 0) {
+            // System.out.println("Moving to set target.");
+            // Check if we crossed the intermediate point.
+            // This won't be a target point because that is already checked for in the
+            // first "if".
             if (checkCrossedInterpolation(path.get(0), prevLoc.get(0), group_locations.get(id))) {
                 prevLoc.add(0, path.get(0));
                 path.remove(0);
+                // We are guaranteed that there is another point in "path".
             }
+            if (path.size() == 0) {
+                // We should never come here.
+                // If we do, then it means that the first "if" that checks if
+                // we crossed a target is buggy.
+                System.out.println("Whaaaaaa");
+            }
+            // Continue moving to the intermediate point or move to the target point.
             return moveInPath(group_locations.get(id), path.get(0));
         }
 
         if(visited_set != null && visited_set.get(id).size() == targets.size()) {
+            // This is if we have finished visiting all targets.
             nextTarget = targets.size();
             return findPathAndMove(group_locations.get(id), initial);
         }
         else {
-            for (int i = 0; i < targets.size(); i++) {
-                for (int j = 0; j < group_locations.size(); j++) {
-                    if (isVisited[i][j] == 1) continue;
-                    if (Point.getDistance(targets.get(i), group_locations.get(j)) < 0.1) {
-                        isVisited[i][j] = 1;
-                    }
-                }
+            // System.out.println("Selecting next target.");
+            // Here is the logic to decide which target to head to next.
+            // If we do not know which target to go next, we make a plan.
+            if (plan[0] == -1) makePlan(group_locations, id);
+            nextTarget = plan[0];
+            for (int i = 0; i < 5; i++) {
+                plan[i] = plan[i + 1];
             }
+            return findPathAndMove(group_locations.get(id), targets.get(nextTarget));
+        }
+    }
+    
+    public void makePlan(List<Point> group_locations, int id) {
+        // Find five closest targets which we have not visited
+        int[] closest;
+        int[] selected;
+        closest = new int[5];
+        selected = new int[targets.size()];
+        for (int k = 0; k < 5; k++) {
+            closest[k] = -1;
             double min = 1e9;
-            int mark = 0;
+            int mark = -1;
             for (int i = 0; i < targets.size(); i++) {
                 if (visited_set != null && visited_set.get(id).contains(i)) continue;
+                if (selected[i] == 1) continue;
                 int count = group_locations.size();
                 for (int j = 0; j < group_locations.size(); j++) {
                     if (j == id) continue;
-                    if (isVisited[i][j] > 0) {
+                    if (visited_set != null && visited_set.get(j).contains(i)) {
                         count--;
                     }
                 }
@@ -84,8 +115,78 @@ public class Player extends sail.sim.Player {
                     mark = i;
                 }
             }
-            nextTarget = mark;
-            return findPathAndMove(group_locations.get(id), targets.get(mark));
+            if (mark > -1) {
+                closest[k] = mark;
+                selected[mark] = 1;
+            }
+        }
+        
+        // We should consider that the end point should close to other points.
+        double minDistance = 1e9;
+        int endPoint = -1;
+        for (int k = 0; k < 5; k++) {
+            if (closest[k] == -1) continue;
+            for (int i = 0; i < targets.size(); i++) {
+                if (visited_set != null && visited_set.get(id).contains(i)) continue;
+                if (selected[i] == 1) continue;
+                double dist = getTrueWeight(targets.get(closest[k]), targets.get(i));
+                if (dist < minDistance) {
+                    minDistance = dist;
+                    endPoint = k;
+                }
+            }
+        }
+        // If no end point exists, which means the game will terminate soon, we calculate distance to initial point.
+        if (endPoint == -1) {
+            for (int k = 0; k < 5; k++) {
+                if (closest[k] == -1) continue;
+                double dist = getTrueWeight(targets.get(closest[k]), initial);
+                if (dist < minDistance) {
+                    minDistance = dist;
+                    endPoint = k;
+                }
+            }
+        }
+        
+        //Compute permutation of five closest targets and make an optimal plan.
+        double minTotal = 1e9;
+        for (int k1 = 0; k1 < 5; k1++) {
+            for (int k2 = 0; k2 < 5; k2++) {
+                if (k1 == k2) continue;
+                for (int k3 = 0; k3 < 5; k3++) {
+                    if (k1 == k3 || k2 == k3) continue;
+                    for (int k4 = 0; k4 < 5; k4++) {
+                        if (k1 == k4 || k2 == k4 || k3 == k4) continue;
+                        int k5 = 10 - k1 - k2 - k3 - k4;
+                        if (k5 != endPoint) continue;
+                        int[] kk;
+                        kk = new int[5];
+                        kk[0] = k1;
+                        kk[1] = k2;
+                        kk[2] = k3;
+                        kk[3] = k4;
+                        kk[4] = k5;
+                        Point current = group_locations.get(id);
+                        double total = 0;
+                        for (int i = 0; i < 5; i++) {
+                            if (closest[kk[i]] > -1) {
+                                total = total + getTrueWeight(current, targets.get(closest[kk[i]]));
+                                current = targets.get(closest[kk[i]]);
+                            }
+                        }
+                        if (total < minTotal) {
+                            minTotal = total;
+                            int j = 0;
+                            for (int i = 0; i < 5; i++) {
+                                if (closest[kk[i]] > -1) {
+                                    plan[j] = closest[kk[i]];
+                                    j++;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
