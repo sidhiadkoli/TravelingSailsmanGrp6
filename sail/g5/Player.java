@@ -7,24 +7,78 @@ import java.util.*;
 
 public class Player extends sail.sim.Player {
     List<Point> targets;
-    Map<Integer, Set<Integer>> visitedTargets;
+    Map<Integer, Set<Integer>> visitedTargets; // For every player, store which targets he has visited.
+    Map<Integer, Set<Integer>> unvisitedTargets; // For every player, store which target he has NOT visited.
+    Map<Integer, Set<Integer>> playerVisitsByTarget; // For every target, store which players have visited it (been received).
+    Set<Integer> ourUnvisitedTargets;
     Random gen;
     int id;
     int numTargets;
+    int numPlayers;
+    Long initialTimeRemaining;
     Point initialLocation;
     Point currentLocation;
     Point windDirection;
 
+    final String INITIAL_POINT = "middle"; // One of: random, middle, windMiddle
+    final String STRATEGY = "weightedGreedy"; // One of: greedy, weightedGreedy
+
+    // Enable or disable different Weighted Greedy params, to compare results.
+    final boolean WG_SCORE_ENABLED = true;
+    final boolean WG_TIME_ENABLED = true;
+    final boolean WG_PLAYERS_DISTANCES_ENABLED = true;
+
+    // This one times out for t=100 and tl=1000, in the first few turns, so it is disabled automatically.
+    final boolean WG_TARGETS_DISTANCES_ENABLED = true;
+
     @Override
     public Point chooseStartingLocation(Point windDirection, Long seed, int t) {
-        // you don't have to use seed unless you want it to 
-        // be deterministic (wrt input randomness)
-        gen = new Random(seed);
-        initialLocation = new Point(gen.nextDouble()*10, gen.nextDouble()*10);
-        double speed = Simulator.getSpeed(initialLocation, windDirection);
         this.numTargets = t;
+
+        // Use seed, to obtain deterministic results wrt input randomness.
+        gen = new Random(seed);
+
         this.windDirection = windDirection;
-        // initialLocation = new Point(5.0, 5.0); // Use the middle point as initial location.
+        switch (INITIAL_POINT) {
+            case "random":
+                initialLocation = new Point(gen.nextDouble()*10, gen.nextDouble()*10);
+                break;
+            case "middle":
+                initialLocation = new Point(5.0, 5.0);
+                break;
+            case "windMiddle":
+                // The middle point wrt the wind lies in the line that follows the wind vector, upwind direction,
+                // at 1/3 of the distance from the center (5,5) to the edges of the board.
+                // To compute it, first we need the unit vector that represents the wind direction.
+                Point unitWind = Point.getUnitVector(windDirection);
+
+                // Now, we need the distance of the edges of the board in this direction. If the angle of the wind
+                // wrt to the x-axis is multiple of 90º, then the solution is trivial, since the distance is 5 km.
+                // For the rest of the cases, we need some trigonometry.
+                Point xAxisVector = new Point(1,0);
+
+                // Rotate the wind so that it is a vector in the first quadrant. This works because of symmetry and
+                // it helps to simplify things.
+                Point absUnitWind = new Point(Math.abs(unitWind.x), Math.abs(unitWind.y));
+
+                double alpha = Point.angleBetweenVectors(xAxisVector, absUnitWind);
+                double distanceToEdge = 5.0;
+                if (alpha <= Math.PI / 4) { // alpha <= 45º
+                    distanceToEdge /= Math.cos(alpha);
+                } else { // 45º < alpha <= 90º
+                    distanceToEdge /= Math.sin(alpha);
+                }
+
+                // Now we have everything we need.
+                initialLocation = new Point(
+                        5 + (1./3 * distanceToEdge) * unitWind.x,
+                        5 + (1./3 * distanceToEdge) * unitWind.y
+                );
+                break;
+            default:
+                System.err.println("Invalid initial point "+INITIAL_POINT+" chosen");
+                initialLocation = new Point(0, 0);
+        }
         return initialLocation;
     }
 
@@ -32,40 +86,144 @@ public class Player extends sail.sim.Player {
     public void init(List<Point> groupLocations, List<Point> targets, int id) {
         this.targets = targets;
         this.id = id;
+        this.numPlayers = groupLocations.size();
+        this.initialTimeRemaining = null;
+
+        // Initialize unvisited targets by player map.
+        this.unvisitedTargets = new HashMap<Integer, Set<Integer>>();
+        for (int playerId = 0; playerId < this.numPlayers; ++playerId) {
+            Set<Integer> playerUnvisited = new HashSet<Integer>();
+            for (int i = 0; i < this.numTargets; ++i) {
+                playerUnvisited.add(i);
+            }
+            this.unvisitedTargets.put(playerId, playerUnvisited);
+        }
+        this.ourUnvisitedTargets = this.unvisitedTargets.get(this.id);
+
+        // Initialize player visits by target map.
+        this.playerVisitsByTarget = new HashMap<Integer, Set<Integer>>();
+        for (int targetId = 0; targetId < this.numTargets; ++targetId) {
+            Set<Integer> playerVisits = new HashSet<Integer>();
+            this.playerVisitsByTarget.put(targetId, playerVisits);
+        }
     }
 
     @Override
     public Point move(List<Point> groupLocations, int id, double timeStep, long timeRemainingMs) {
+        if (this.initialTimeRemaining == null) this.initialTimeRemaining = timeRemainingMs;
         this.currentLocation = groupLocations.get(id);
-        return greedyMove(groupLocations, id, timeStep, timeRemainingMs);
+        switch (STRATEGY) {
+            case "greedy":
+                return greedyMove(groupLocations, id, timeStep, timeRemainingMs);
+            case "weightedGreedy":
+                return weightedGreedyMove(groupLocations, id, timeStep, timeRemainingMs);
+            default:
+                System.err.println("Invalid strategy "+STRATEGY+" chosen");
+                return new Point(0,0);
+        }
     }
 
-    // Applies the Greedy Strategy to Find the next Point
-    public Point greedyMove(List<Point> groupLocations, int id, double timeStep, long timeRemainingMs){
-        Point myCurrentLocation = groupLocations.get(id);
-        int nTargets = targets.size();
-        Set<Integer> unVisitedTargets = new HashSet<Integer>();
-        Point nextTarget = initialLocation; // If no unvisited targets, initial location will be out next target.
+    public Point weightedGreedyMove(List<Point> groupLocations, int id, double timeStep, long timeRemainingMs){
+        // Let's get the maximum weight unvisited target according to the following formula (if all params are enabled):
+        //  targetWeight =
+        //      targetRemainingScore * distanceFromNonVisitedPlayers
+        //     ——————————————————————————————————————————————————————
+        //         timeToTarget * weightedDistanceToOtherTargets
 
-        for (int i = 0; i < nTargets; i ++){
-            if (visitedTargets == null || !visitedTargets.get(id).contains(i))
-                unVisitedTargets.add(i);
+        double maxWeight = Double.NEGATIVE_INFINITY;
+        Point maxWeightTarget = this.initialLocation;  // If no unvisited targets, initial location will be our next target.
+        for (int targetId : this.ourUnvisitedTargets) {
+            double weight = 1.0;
+
+            if (WG_SCORE_ENABLED) {
+                int score = computeRemainingScore(targetId);
+                weight *= score;
+            }
+
+            if (WG_TIME_ENABLED) {
+                double ourTime = computeEstimatedTimeToTarget(targets.get(targetId));
+                weight /= ourTime;
+            }
+
+            if (WG_PLAYERS_DISTANCES_ENABLED) {
+                double othersTime = computeUnvisitedPlayersTimeTo(groupLocations, targetId);
+                double avgPlayersTime = othersTime / this.numPlayers;
+                weight *= avgPlayersTime;
+            }
+
+            boolean wontTimeout =
+                    (this.numTargets <= 20) || (this.numTargets <= 100 && this.initialTimeRemaining > 9800);
+            if (WG_TARGETS_DISTANCES_ENABLED && wontTimeout) {
+                double weightedTargetsTime = computeWeightedTimeToOtherTargets(targetId, this.targets);
+                weight /= weightedTargetsTime;
+            }
+
+            if (weight > maxWeight) {
+                maxWeight = weight;
+                maxWeightTarget = targets.get(targetId);
+            }
         }
 
-        double minTime = Double.MAX_VALUE;
-        for (int unvisitedTargetPoint : unVisitedTargets){
-            double distance = Point.getDistance(myCurrentLocation, (Point) targets.get(unvisitedTargetPoint));
-            Point direction = Point.getDirection(myCurrentLocation, (Point) targets.get(unvisitedTargetPoint));
-            double speed = Simulator.getSpeed(direction, windDirection);
-            double time = distance/speed;
+        return computeNextDirection(maxWeightTarget, timeStep);
+    }
 
-            if (time < minTime){
+    // Applies the Greedy Strategy to choose the next target, only considering the time to reach it.
+    public Point greedyMove(List<Point> groupLocations, int id, double timeStep, long timeRemainingMs){
+        Point nextTarget = initialLocation; // If no unvisited targets, initial location will be our next target.
+
+        double minTime = Double.MAX_VALUE;
+        for (int unvisitedTargetPoint : this.ourUnvisitedTargets) {
+            double time = computeEstimatedTimeToTarget(targets.get(unvisitedTargetPoint));
+            if (time < minTime) {
                 minTime = time;
                 nextTarget = targets.get(unvisitedTargetPoint);
             }
         }
 
         return computeNextDirection(nextTarget, timeStep);
+    }
+
+    private double computeWeightedTimeToOtherTargets(int targetId, List<Point> targets) {
+        // It is weighted because it also takes into account the remaining score of those targets.
+        double weightedTime = 1.0;
+        Point thisTarget = targets.get(targetId);
+        for (int i : this.ourUnvisitedTargets) {
+            if (i == targetId) continue;  // Skip itself.
+            Point otherTarget = targets.get(i);
+            int remainingScore = computeRemainingScore(i);
+            weightedTime += computeEstimatedTimeToTarget(thisTarget, otherTarget) / remainingScore;
+        }
+        return weightedTime;
+    }
+
+    private double computeUnvisitedPlayersTimeTo(List<Point> groupLocations, int targetId) {
+        double distance = 1.0;
+        Point target = this.targets.get(targetId);
+        for (int playerId = 0; playerId < this.numPlayers; ++playerId) {
+            if (playerId == this.id) continue; // Skip our own.
+            if (!this.playerVisitsByTarget.get(targetId).contains(playerId)) {
+                // This means that this player hasn't visited this target yet, so
+                // compute her time to target.
+                Point player = groupLocations.get(playerId);
+                distance += computeEstimatedTimeToTarget(player, target);
+            }
+        }
+        return distance;
+    }
+
+    private int computeRemainingScore(int targetId) {
+        return this.numPlayers - this.playerVisitsByTarget.get(targetId).size();
+    }
+
+    private double computeEstimatedTimeToTarget(Point target) {
+        return computeEstimatedTimeToTarget(this.currentLocation, target);
+    }
+
+    private double computeEstimatedTimeToTarget(Point point, Point target) {
+        double distance = Point.getDistance(point, target);
+        Point direction = Point.getDirection(point, target);
+        double speed = Simulator.getSpeed(direction, windDirection);
+        return distance/speed;
     }
 
     private Point computeNextDirection(Point target, double timeStep) {
@@ -130,6 +288,19 @@ public class Player extends sail.sim.Player {
     */
     @Override
     public void onMoveFinished(List<Point> groupLocations, Map<Integer, Set<Integer>> visitedTargets) {
+        // Let's use this information to prepare some convenient data structures:
+        //  - For every player, unvisited targets, with a special variable pointing to ours.
+        //  - For every target, players that have visited it. This will help compute potential score easily.
         this.visitedTargets = visitedTargets;
+
+        for (Integer playerId : visitedTargets.keySet()) {
+            Set<Integer> playerVisited = this.visitedTargets.get(playerId);
+            Set<Integer> playerUnvisited = this.unvisitedTargets.get(playerId);
+            playerUnvisited.removeAll(playerVisited);
+
+            for (Integer target : playerVisited) {
+                this.playerVisitsByTarget.get(target).add(playerId);
+            }
+        }
     }
 }
