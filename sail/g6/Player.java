@@ -4,6 +4,9 @@ import sail.sim.Point;
 import sail.sim.Simulator;
 import java.util.concurrent.TimeUnit;
 import java.util.*;
+import java.io.*;
+// import java.io.PrintWriter;
+// import java.io.File;
 
 public class Player extends sail.sim.Player {
     List<Point> targets;
@@ -17,6 +20,8 @@ public class Player extends sail.sim.Player {
 
     int nextTarget = -1;
     int isVisited[][];
+    PrintWriter writer;// this lets us write to the file playerLocationData.txt
+    int roundNumber = 0;
 
     @Override
     public Point chooseStartingLocation(Point wind_direction, Long seed, int t) {
@@ -37,6 +42,35 @@ public class Player extends sail.sim.Player {
         this.targets = targets;
         this.id = id;
         isVisited = new int[targets.size()][group_locations.size()];
+        // File myFile = new File("playerLocationData.txt");
+        // myFile.getParentFile().mkdirs();
+        // File file = new File ("playerLocationData_2.txt");
+        // file.getParentFile().mkdirs();
+        try{
+            this.writer = new PrintWriter("playerLocationData.txt");
+            // PrintWriter printWriter = new PrintWriter(file);
+            // this.writer.close();
+            // System.out.println(System.getProperty("user.dir"));
+            // printWriter.close();       
+        }
+        catch (FileNotFoundException ex)  {
+            System.out.println("ok");
+            // insert code to run when exception occurs
+        }
+        this.writer.println("Number of players: " + group_locations.size());
+        this.writer.println("Number of targets: " + targets.size());
+        this.writer.println("TargetLocations");
+        for (int i = 0; i < targets.size(); i++) {
+            this.writer.println("Target number: " + i );
+            this.writer.println("X: " + targets.get(i).x);
+            this.writer.println("Y: " + targets.get(i).y);
+
+        }
+        this.writer.println("******************************\n\n");
+        this.writer.close();
+
+        // this.writer = new PrintWriter("playerLocationData.txt", "UTF-8");
+        // PrintWriter temp = new PrintWriter("playerLocationData.txt", "UTF-8");
     }
 
     @Override
@@ -212,6 +246,72 @@ public class Player extends sail.sim.Player {
     */
     @Override
     public void onMoveFinished(List<Point> group_locations, Map<Integer, Set<Integer>> visited_set) {
+        // movementPredictionFileWrite(group_locations, visited_set);
+        roundNumber += 1;
         this.visited_set = visited_set;
+    }
+
+
+
+    private void movementPredictionFileWrite(List<Point> group_locations, Map<Integer, Set<Integer>> visited_set){
+        /*
+            writes information to the outfile which can be used by outside scripts for some good ol' machine learning
+
+            Right now we've already wrote the location of all the targets in init, and this function will simply write
+                the current locations of all players and which sets they've visited.
+            In the future we might try writing stuff about how far it is to each target, the point distribution at each target,
+            ....
+
+            
+
+
+        */
+
+
+        try{
+            this.writer = new PrintWriter(new FileOutputStream(
+        new File("playerLocationData.txt"), true /* append = true */));     
+        }
+        catch (FileNotFoundException ex)  {
+            System.out.println("ok");
+            // insert code to run when exception occurs
+        }
+        this.writer.println("round number " + roundNumber);
+        this.writer.println("Printing locations of players");
+        for (int i = 0; i < group_locations.size(); i++) {
+            this.writer.println("location for player " + i);
+            this.writer.println("X: "+ group_locations.get(i).x);
+            this.writer.println("Y: "+ group_locations.get(i).y);
+        }
+        this.writer.println("Printing visited locations");
+        this.writer.println(visited_set);
+        for(int i = 0; i < visited_set.size(); i++){
+            for(Integer targetID : visited_set.get(i)){
+                this.writer.println("Visited Location for player " + i + " " + targetID);
+            }
+            // for(int j = 0; j < visited_set.get(i).size(); j ++){
+            //     this.writer.println("Visited Location for player " + i + " " + visited_set.get(i).get(j));
+            // }
+
+        }
+        // this.writer.println("Points at Each Location");
+        // this.writer.println(targets);
+        // this.writer.println(isVisited);
+
+
+        // this.writer.println("Target Scores");
+        // for (int i = 0; i < targets.size(); i++) {
+        //     for (int j = 0; j < group_locations.size(); j++) {
+        //         this.writer.println("target: " + i + " player: " + j + " score: " + isVisited[i][j]);
+        //         // if (isVisited[i][j] == 1) continue;
+        //         // if (Point.getDistance(targets.get(i), group_locations.get(j)) < 0.1) {
+        //         //     isVisited[i][j] = 1;
+        //         // }
+        //     }
+        // }
+
+        this.writer.println("************\n\n\n");
+        this.writer.close();
+
     }
 }
