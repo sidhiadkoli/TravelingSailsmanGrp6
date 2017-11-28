@@ -23,6 +23,7 @@ public class Player extends sail.sim.Player {
     int isVisited[][];
     PrintWriter writer;// this lets us write to the file playerLocationData.txt
     int roundNumber = 0;
+    int pointThreshold = 100;// if there are more points then this then we'll start in a corner.
 
 
     @Override
@@ -30,12 +31,53 @@ public class Player extends sail.sim.Player {
         // you don't have to use seed unless you want it to 
         // be deterministic (wrt input randomness)
         wind = wind_direction;
+
+
+        double eps = 0.5;
+        if (t >= pointThreshold){
+            List<Point> fourCorners = new ArrayList<>();
+            fourCorners.add(new Point(0 + eps, 0 + eps));
+            fourCorners.add(new Point(0 + eps, 10 - eps));
+            fourCorners.add(new Point(10 - eps, 0 + eps));
+            fourCorners.add(new Point(10 - eps, 10 - eps));
+
+
+            List<Point> fourCorners_test = new ArrayList<>();// test wind angle to these points with reference to the center
+            fourCorners_test.add(new Point(-5, -5));
+            fourCorners_test.add(new Point(-5, 5));
+            fourCorners_test.add(new Point(5, -5));
+            fourCorners_test.add(new Point(5, 5));
+            // System.out.println(wind);
+            // System.out.println(fourCorners_test);
+            Point cornerStart = new Point(0,0);
+            double angleBetween = 0.0;
+            double minPerpendicularAngleDifference = Double.MAX_VALUE;
+            for (int i = 0; i < fourCorners_test.size(); i++){
+                System.out.println("min perp difference " + minPerpendicularAngleDifference);
+                angleBetween = Point.angleBetweenVectors(wind, fourCorners_test.get(i));
+                System.out.println("angle between " + angleBetween + "\n");
+                if(Math.abs(90.0 - angleBetween ) <= minPerpendicularAngleDifference){
+                   cornerStart =  fourCorners.get(i);
+                   minPerpendicularAngleDifference = Math.abs(90.0 - angleBetween );
+                }
+            }
+            // System.out.println("wind direction");
+            // System.out.println(wind.x);
+            // System.out.println(wind.y);
+            // System.out.println("Starting at x, y");
+            // System.out.println(cornerStart.x);
+            // System.out.println(cornerStart.y);
+            initial = cornerStart;
+        }else{
+            // prevLoc = new ArrayList<>();
+            // path = new ArrayList<>();
+            Point bias = Point.rotateCounterClockwise(wind_direction, Math.PI / 2);
+            double bias_x = bias.x * 4;
+            double bias_y = bias.y * 4;
+            initial = new Point(5 + bias_x, 5 + bias_y);
+        }
         prevLoc = new ArrayList<>();
         path = new ArrayList<>();
-        Point bias = Point.rotateCounterClockwise(wind_direction, Math.PI / 2);
-        double bias_x = bias.x * 4;
-        double bias_y = bias.y * 4;
-        initial = new Point(5 + bias_x, 5 + bias_y);
         double speed = Simulator.getSpeed(initial, wind_direction);
         prevLoc.add(0, initial);
         return initial;
