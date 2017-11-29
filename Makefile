@@ -1,6 +1,6 @@
-g=2 g6 default1
+g=5 g6 g1 g2 g3 g5
 fps=80
-t=5
+t=100
 frameskip=1
 S=10
 timelimit = 1000

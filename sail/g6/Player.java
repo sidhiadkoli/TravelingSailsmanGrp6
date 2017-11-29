@@ -33,7 +33,7 @@ public class Player extends sail.sim.Player {
         wind = wind_direction;
 
 
-        double eps = 0.5;
+        double eps = 1.0;
         if (t >= pointThreshold){
             List<Point> fourCorners = new ArrayList<>();
             fourCorners.add(new Point(0 + eps, 0 + eps));
@@ -53,9 +53,9 @@ public class Player extends sail.sim.Player {
             double angleBetween = 0.0;
             double minPerpendicularAngleDifference = Double.MAX_VALUE;
             for (int i = 0; i < fourCorners_test.size(); i++){
-                System.out.println("min perp difference " + minPerpendicularAngleDifference);
+                // System.out.println("min perp difference " + minPerpendicularAngleDifference);
                 angleBetween = Point.angleBetweenVectors(wind, fourCorners_test.get(i));
-                System.out.println("angle between " + angleBetween + "\n");
+                // System.out.println("angle between " + angleBetween + "\n");
                 if(Math.abs(90.0 - angleBetween ) <= minPerpendicularAngleDifference){
                    cornerStart =  fourCorners.get(i);
                    minPerpendicularAngleDifference = Math.abs(90.0 - angleBetween );
