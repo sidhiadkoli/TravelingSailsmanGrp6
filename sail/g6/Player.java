@@ -92,28 +92,28 @@ public class Player extends sail.sim.Player {
         // myFile.getParentFile().mkdirs();
         // File file = new File ("playerLocationData_2.txt");
         // file.getParentFile().mkdirs();
-        try{
-            this.writer = new PrintWriter("playerLocationData.txt");
-            // PrintWriter printWriter = new PrintWriter(file);
-            // this.writer.close();
-            // System.out.println(System.getProperty("user.dir"));
-            // printWriter.close();       
-        }
-        catch (FileNotFoundException ex)  {
-            System.out.println("ok");
-            // insert code to run when exception occurs
-        }
-        this.writer.println("Number of players: " + group_locations.size());
-        this.writer.println("Number of targets: " + targets.size());
-        this.writer.println("TargetLocations");
-        for (int i = 0; i < targets.size(); i++) {
-            this.writer.println("Target number: " + i );
-            this.writer.println("X: " + targets.get(i).x);
-            this.writer.println("Y: " + targets.get(i).y);
+        // try{
+        //     this.writer = new PrintWriter("playerLocationData.txt");
+        //     // PrintWriter printWriter = new PrintWriter(file);
+        //     // this.writer.close();
+        //     // System.out.println(System.getProperty("user.dir"));
+        //     // printWriter.close();       
+        // }
+        // catch (FileNotFoundException ex)  {
+        //     System.out.println("ok");
+        //     // insert code to run when exception occurs
+        // }
+        // this.writer.println("Number of players: " + group_locations.size());
+        // this.writer.println("Number of targets: " + targets.size());
+        // this.writer.println("TargetLocations");
+        // for (int i = 0; i < targets.size(); i++) {
+        //     this.writer.println("Target number: " + i );
+        //     this.writer.println("X: " + targets.get(i).x);
+        //     this.writer.println("Y: " + targets.get(i).y);
 
-        }
-        this.writer.println("******************************\n\n");
-        this.writer.close();
+        // }
+        // this.writer.println("******************************\n\n");
+        // this.writer.close();
 
         // this.writer = new PrintWriter("playerLocationData.txt", "UTF-8");
         // PrintWriter temp = new PrintWriter("playerLocationData.txt", "UTF-8");
