@@ -13,6 +13,7 @@ public class Player extends sail.sim.Player {
     List<Point> path;
     List<Point> prevLoc;
     Map<Integer, Set<Integer>> visited_set;
+    List<Double> sumTargetsDist;
     Random gen;
     int id;
     Point initial;
@@ -32,8 +33,7 @@ public class Player extends sail.sim.Player {
         // be deterministic (wrt input randomness)
         wind = wind_direction;
 
-
-        double eps = 0.5;
+        double eps = 1.0;
         if (t >= pointThreshold){
             List<Point> fourCorners = new ArrayList<>();
             fourCorners.add(new Point(0 + eps, 0 + eps));
@@ -53,14 +53,15 @@ public class Player extends sail.sim.Player {
             double angleBetween = 0.0;
             double minPerpendicularAngleDifference = Double.MAX_VALUE;
             for (int i = 0; i < fourCorners_test.size(); i++){
-                System.out.println("min perp difference " + minPerpendicularAngleDifference);
+                // System.out.println("min perp difference " + minPerpendicularAngleDifference);
                 angleBetween = Point.angleBetweenVectors(wind, fourCorners_test.get(i));
-                System.out.println("angle between " + angleBetween + "\n");
+                // System.out.println("angle between " + angleBetween + "\n");
                 if(Math.abs(90.0 - angleBetween ) <= minPerpendicularAngleDifference){
                    cornerStart =  fourCorners.get(i);
                    minPerpendicularAngleDifference = Math.abs(90.0 - angleBetween );
                 }
             }
+
             // System.out.println("wind direction");
             // System.out.println(wind.x);
             // System.out.println(wind.y);
@@ -88,6 +89,8 @@ public class Player extends sail.sim.Player {
         this.targets = targets;
         this.id = id;
         isVisited = new int[targets.size()][group_locations.size()];
+        this.sumTargetsDist = new ArrayList<>();
+
         // File myFile = new File("playerLocationData.txt");
         // myFile.getParentFile().mkdirs();
         // File file = new File ("playerLocationData_2.txt");
@@ -121,16 +124,20 @@ public class Player extends sail.sim.Player {
 
     @Override
     public Point move(List<Point> group_locations, int id, double dt, long time_remaining_ms) {
-
         if (visited_set != null && visited_set.get(id).size() == targets.size()) {
             // This is if we have finished visiting all targets.
             nextTarget = targets.size();
             return findAngle(group_locations.get(id), initial, dt);
         }
+        else if (nextTarget != -1 && !visited_set.get(id).contains(nextTarget)) {
+            return findAngle(group_locations.get(id), targets.get(nextTarget), dt);
+        }
         else {
             // System.out.println("Selecting next target.");
             // Here is the logic to decide which target to head to next.
             // Now we just consider the nearest target.
+            setNearestWeights(id, 20);
+
             double min = 1e9;
             int mark = 0;
             for (int i = 0; i < targets.size(); i++) {
@@ -142,12 +149,17 @@ public class Player extends sail.sim.Player {
                         count--;
                     }
                 }
-                double dist = getTrueWeight(group_locations.get(id), targets.get(i)) / count;
+
+                // Prevent divide by 0.
+                double sumTargets = sumTargetsDist.get(i) <= 1e-6 ? 1 : sumTargetsDist.get(i);
+
+                double dist = (getTrueWeight(group_locations.get(id), targets.get(i)) / count) / sumTargets;
                 if (dist < min) {
                     min = dist;
                     mark = i;
                 }
             }
+
             nextTarget = mark;
             return findAngle(group_locations.get(id), targets.get(mark), dt);
         }
@@ -201,6 +213,78 @@ public class Player extends sail.sim.Player {
         path.add(nextLoc);
 
         return moveInPath(currentLoc, grid.get(minIndex));
+    }
+
+    private void setNearestWeights(int id, int num) {
+        sumTargetsDist.clear();
+        double min = 1e9;
+
+        for (int k = 0; k < targets.size(); ++k) {
+            if (visited_set != null && visited_set.get(id).contains(k)) {
+                sumTargetsDist.add(0.0);
+                continue;
+            }
+
+            ArrayList<Double> near = new ArrayList<>();
+            for (int i = 0; i < targets.size(); ++i) {
+                if (i == k || (visited_set != null && visited_set.get(id).contains(i))) {
+                    continue;
+                }
+
+                double d = Point.getDistance(targets.get(k), targets.get(i));
+
+                // Ignore the point if it's greater than 1km.
+                //if (d > 2.0) {
+                //    continue;
+                //}
+
+                if (near.size() == 0) {
+                    near.add(d);
+                    continue;
+                }
+
+                int j = 0;
+                while (j < near.size() && near.get(j) < d)
+                    j += 1;
+
+                if (j == near.size()) {
+                    if (near.size() >= num) {
+                        continue;
+                    }
+
+                    near.add(d);
+                } else {
+                    near.add(j, d);
+                    if (near.size() >= num) {
+                        near.remove(near.size() - 1);
+                    }
+                }
+            }
+
+            //System.out.print("\n" + k + ", " + near);
+            double sumDist = sum(near);
+
+
+            sumTargetsDist.add(sumDist/6);
+
+//            if (sumDist < min) {
+//                min = sumDist;
+//            }
+        }
+
+        // Scale the target distances down by the minimum distance.
+//        for (int i = 0; i < sumTargetsDist.size(); ++i) {
+//            sumTargetsDist.set(i, sumTargetsDist.get(i)/min);
+//        }
+    }
+
+    private double sum(List<Double> list) {
+        double sum = 0;
+        for (double ele : list) {
+            sum += ele;
+        }
+
+        return sum;
     }
 
     // Get the grid of intermediate points.

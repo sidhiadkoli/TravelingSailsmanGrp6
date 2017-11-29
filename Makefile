@@ -1,9 +1,9 @@
-g=7 g1 g2 g3 g4x g5 g6 default1
+g=6 g6d g1 g2 g3 g4x g5
 fps=80
-t=5
+t=100
 frameskip=1
 S=10
-timelimit = 1000
+timelimit = 5000
 timestep = 0.015
 all: compile
 
