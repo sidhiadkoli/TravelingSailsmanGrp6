@@ -23,8 +23,8 @@ public class Player extends sail.sim.Player {
     int isVisited[][];
     PrintWriter writer;// this lets us write to the file playerLocationData.txt
     int roundNumber = 0;
-    int pointThreshold = Integer.MAX_VALUE;// if there are more points then this then we'll start in a corner.
-
+    int cornerThreshold = 100;// if there are more points then this then we'll start in a corner.
+    int centerThreshold = 5; // If there are less than these many points, then we start closer to the center.
 
     @Override
     public Point chooseStartingLocation(Point wind_direction, Long seed, int t) {
@@ -34,14 +34,13 @@ public class Player extends sail.sim.Player {
 
 
         double eps = 1.0;
-        if (false){//(t >= pointThreshold){
-            System.out.println("Corner start");
+        if (t >= cornerThreshold) {
+            //System.out.println("Corner start");
             List<Point> fourCorners = new ArrayList<>();
             fourCorners.add(new Point(0 + eps, 0 + eps));
             fourCorners.add(new Point(0 + eps, 10 - eps));
             fourCorners.add(new Point(10 - eps, 0 + eps));
             fourCorners.add(new Point(10 - eps, 10 - eps));
-
 
             List<Point> fourCorners_test = new ArrayList<>();// test wind angle to these points with reference to the center
             fourCorners_test.add(new Point(-5, -5));
@@ -69,7 +68,11 @@ public class Player extends sail.sim.Player {
             // System.out.println(cornerStart.x);
             // System.out.println(cornerStart.y);
             initial = cornerStart;
-        }else{
+        } else if (t <= centerThreshold) {
+            Point bias = Point.rotateCounterClockwise(wind_direction, Math.PI / 2);
+            initial = new Point(5 + bias.x, 5 + bias.y);
+        }
+        else {
             // prevLoc = new ArrayList<>();
             // path = new ArrayList<>();
             Point bias = Point.rotateCounterClockwise(wind_direction, Math.PI / 2);
