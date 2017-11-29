@@ -1,4 +1,4 @@
-g=2 g6 default1
+g=7 g1 g2 g3 g4x g5 g6 default1
 fps=80
 t=5
 frameskip=1
