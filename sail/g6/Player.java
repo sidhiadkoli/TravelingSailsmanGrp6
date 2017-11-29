@@ -23,7 +23,7 @@ public class Player extends sail.sim.Player {
     int isVisited[][];
     PrintWriter writer;// this lets us write to the file playerLocationData.txt
     int roundNumber = 0;
-    int pointThreshold = 100;// if there are more points then this then we'll start in a corner.
+    int pointThreshold = Integer.MAX_VALUE;// if there are more points then this then we'll start in a corner.
 
 
     @Override
@@ -34,7 +34,8 @@ public class Player extends sail.sim.Player {
 
 
         double eps = 1.0;
-        if (t >= pointThreshold){
+        if (false){//(t >= pointThreshold){
+            System.out.println("Corner start");
             List<Point> fourCorners = new ArrayList<>();
             fourCorners.add(new Point(0 + eps, 0 + eps));
             fourCorners.add(new Point(0 + eps, 10 - eps));
