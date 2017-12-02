@@ -1,4 +1,4 @@
-package sail.g4x;
+package sail.g4;
 
 import sail.sim.Point;
 import sail.sim.Simulator;
@@ -6,13 +6,14 @@ import java.util.concurrent.TimeUnit;
 import java.util.*;
 
 public class Player extends sail.sim.Player {
-
+    
     public final double WINDSPEED = 50.0;
     List<Point> targets;
     Map<Integer, Set<Integer>> visited_set;
     Random gen;
     int id;
     Point initial;
+    int numPlayers = 0;
     Point wind_direction;
     double wind_angle;
     ArrayList<Point> currentQueue = new ArrayList<Point>();
@@ -21,12 +22,13 @@ public class Player extends sail.sim.Player {
 
     @Override
     public Point chooseStartingLocation(Point wind_direction, Long seed, int t) {
-        // you don't have to use seed unless you want it to
+        // you don't have to use seed unless you want it to 
         // be deterministic (wrt input randomness)
         this.wind_direction = wind_direction;
         this.wind_angle = Math.atan2(wind_direction.y, wind_direction.x);
         gen = new Random(seed);
-        initial = new Point(5.0, 5.0);//new Point(gen.nextDouble()*10, gen.nextDouble()*10);
+        initial = new Point(5.0+2*Math.cos(wind_angle), 5.0+2*Math.sin(wind_angle));//new Point(gen.nextDouble()*10, gen.nextDouble()*10);
+
         // double speed = Simulator.getSpeed(initial, wind_direction);
         return initial;
     }
@@ -36,11 +38,12 @@ public class Player extends sail.sim.Player {
         this.targets = targets;
         this.id = id;
         this.sHelper = new SailingHelper(targets, id, initial, wind_direction, wind_angle);
+        this.numPlayers = group_locations.size();
     }
 
     @Override
     public Point move(List<Point> group_locations, int id, double dt, long time_remaining_ms) {
-        // testing timeouts...
+        // testing timeouts... 
         // try {
         //     TimeUnit.MILLISECONDS.sleep(1);
         // } catch(Exception ex) {
@@ -51,6 +54,7 @@ public class Player extends sail.sim.Player {
         Point currentLoc = group_locations.get(id);
         //System.out.println(currentLoc.x + ", " + currentLoc.y);
         Point goalLoc;
+        Point prevTarget;
         ArrayList<Integer> availableTargetIndices = new ArrayList<Integer>();
         // short-circuiting is great
         if(visited_set != null && visited_set.get(id).size() == targets.size()) {
@@ -63,10 +67,14 @@ public class Player extends sail.sim.Player {
                     availableTargetIndices.add(i);
                 }
             }
-
+            
             // either A:
-            goalLoc = sHelper.getClosestTargetByTime(availableTargetIndices, currentLoc);
+            if(availableTargetIndices.size()>7*targets.size()/10)
+                goalLoc = sHelper.getClosestTargetByTime(availableTargetIndices, currentLoc);
             // \end A.
+            else
+                goalLoc = sHelper.getHeuristicDistance(availableTargetIndices,currentLoc,numPlayers,group_locations);
+
 
             // or B:
             // int k = 6;
@@ -113,8 +121,8 @@ public class Player extends sail.sim.Player {
     }
 
     /**
-     * visited_set.get(i) is a set of targets that the ith player has visited.
-     */
+    * visited_set.get(i) is a set of targets that the ith player has visited.
+    */
     @Override
     public void onMoveFinished(List<Point> group_locations, Map<Integer, Set<Integer>> visited_set) {
         this.visited_set = visited_set;
