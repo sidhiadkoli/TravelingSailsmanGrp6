@@ -6,17 +6,18 @@ import java.util.*;
 
 public class Player extends sail.sim.Player {
     List<Point> targets;
-    List<Point> path;
-    List<Point> prevLoc;
     Map<Integer, Set<Integer>> visited_set;
     Random gen;
     int id;
     Point initial;
     Point wind;
     int nextTarget = -1;
+    int currentGrid = 0;
+    int directionGrid = 1;
+    int resolution = 3;
 
     // Oliver added these three attributes below. isVisited might be deprecated now.
-    int isVisited[][];
+    int isVisited[];
     int roundNumber = 0;
     int cornerThreshold = 100;// if there are more points then this then we'll start in a corner.
     int centerThreshold = 5; // If there are less than these many points, then we start closer to the center.
@@ -64,10 +65,8 @@ public class Player extends sail.sim.Player {
             double bias_y = bias.y * 4;
             initial = new Point(5 + bias_x, 5 + bias_y);
         }
-        prevLoc = new ArrayList<>();
-        path = new ArrayList<>();
         double speed = Simulator.getSpeed(initial, wind_direction);
-        prevLoc.add(0, initial);
+        currentGrid = getGrid(initial, resolution);
         return initial;
     }
 
@@ -75,7 +74,7 @@ public class Player extends sail.sim.Player {
     public void init(List<Point> group_locations, List<Point> targets, int id) {
         this.targets = targets;
         this.id = id;
-        isVisited = new int[targets.size()][group_locations.size()];
+        isVisited = new int[resolution * resolution];
     }
 
     @Override
@@ -84,16 +83,45 @@ public class Player extends sail.sim.Player {
             // This is if we have finished visiting all targets.
             nextTarget = targets.size();
             return findAngle(group_locations.get(id), initial, dt);
-        } else if ((targets.size() >= tThreshold || dt < 0.01) && visited_set != null && !visited_set.get(id).contains(nextTarget)) {
+        }
+        else if ((targets.size() >= tThreshold || dt < 0.01) && visited_set != null && !visited_set.get(id).contains(nextTarget)) {
             return findAngle(group_locations.get(id), targets.get(nextTarget), dt);
         }
         else {
             // Here is the logic to decide which target to head to next.
-            // Now we just consider the nearest target.
+            // Check whether we have reached all targets in the current grid.
+            boolean finishGrid = true;
+            int x0 = currentGrid / resolution;
+            int y0 = currentGrid % resolution;
+            double x1 = (double)x0 * 10 / resolution;
+            double x2 = (double)(x0 + 1) * 10 / resolution;
+            double y1 = (double)y0 * 10 / resolution;
+            double y2 = (double)(y0 + 1) * 10 / resolution;
+            for (int i = 0; i < targets.size(); i++) {
+                if (visited_set != null && visited_set.get(id).contains(i)) continue;
+                Point temp = targets.get(i);
+                if (temp.x > x1 && temp.x < x2 && temp.y > y1 && temp.y < y2) {
+                    finishGrid = false;
+                    break;
+                }
+            }
+            if (finishGrid) {
+                changeGrid();
+            }
+            x0 = currentGrid / resolution;
+            y0 = currentGrid % resolution;
+            x1 = (double)x0 * 10 / resolution;
+            x2 = (double)(x0 + 1) * 10 / resolution;
+            y1 = (double)y0 * 10 / resolution;
+            y2 = (double)(y0 + 1) * 10 / resolution;
+            
+            // Find the closest target in the current grid.
             double min = 1e9;
             int mark = 0;
             for (int i = 0; i < targets.size(); i++) {
                 if (visited_set != null && visited_set.get(id).contains(i)) continue;
+                Point temp = targets.get(i);
+                if (!(temp.x > x1 && temp.x < x2 && temp.y > y1 && temp.y < y2)) continue;
                 int count = group_locations.size();
                 for (int j = 0; j < group_locations.size(); j++) {
                     if (j == id) continue;
@@ -101,7 +129,7 @@ public class Player extends sail.sim.Player {
                         count--;
                     }
                 }
-                double dist = getTrueWeight(group_locations.get(id), targets.get(i)) / count;
+                double dist = getTrueWeight(group_locations.get(id), temp) / count;
                 if (dist < min) {
                     min = dist;
                     mark = i;
@@ -130,6 +158,55 @@ public class Player extends sail.sim.Player {
             }
         }
         return moveInPath(currentLoc, result);
+    }
+    
+    public int getGrid(Point initial, int width) {
+        // Find start grid.
+        for (int i = 0; i < width; i++) {
+            for (int j = 0; j < width; j++) {
+                double x1 = (double)i * 10 / width;
+                double x2 = (double)(i + 1) * 10 / width;
+                double y1 = (double)j * 10 / width;
+                double y2 = (double)(j + 1) * 10 / width;
+                if (initial.x > x1  && initial.x < x2 && initial.y > y1 && initial.y < y2) {
+                    int temp = i * width + j;
+                    return temp;
+                }
+            }
+        }
+        return 0;
+    }
+    
+    public void changeGrid() {
+        // If we have visited all targets in the current grid, we choose another grid.
+        isVisited[currentGrid] = 1;
+        int tot = resolution * resolution;
+        int nextGrid = currentGrid + directionGrid;
+        for (int i = 0; i < 5; i++) {
+            // Choose proper direction.
+            boolean tf = true;
+            if (nextGrid < 0 || nextGrid > tot - 1) {
+                tf = false;
+            }
+            else if (isVisited[nextGrid] == 1) {
+                tf = false;
+            }
+            else if (currentGrid % resolution == 0 && directionGrid == -1) {
+                tf = false;
+            }
+            else if ((currentGrid + 1) % resolution == 0 && directionGrid == 1) {
+                tf = false;
+            }
+            if (tf == false) {
+                if (directionGrid == 1) directionGrid = resolution;
+                else if (directionGrid == resolution) directionGrid = -1;
+                else if (directionGrid == -1) directionGrid = -resolution;
+                else if (directionGrid == -resolution) directionGrid = 1;
+                else directionGrid = 1;
+            }
+            nextGrid = currentGrid + directionGrid;
+        }
+        currentGrid = nextGrid;
     }
 
     // Move from currentLoc to nextLoc.
