@@ -84,13 +84,6 @@ public class Player extends sail.sim.Player {
             // This is if we have finished visiting all targets.
             nextTarget = targets.size();
             return findAngle(group_locations.get(id), initial, dt);
-        } else if (dt < 0.01 && targets.size() == 25 && visited_set != null && !visited_set.get(id).contains(nextTarget)) {
-            // Hard-coded for 25 targets and 0.004 time step. We take the best path 4/5 times and direct line 1.5 times.
-            if (nextTarget % 5 == 0) {
-                return moveInPath(group_locations.get(id), targets.get(nextTarget));
-            }
-
-            return findAngle(group_locations.get(id), targets.get(nextTarget), dt);
         }
         else {
             // Here is the logic to decide which target to head to next.
