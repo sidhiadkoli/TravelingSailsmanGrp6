@@ -6,8 +6,6 @@ import java.util.*;
 
 public class Player extends sail.sim.Player {
     List<Point> targets;
-    List<Point> path;
-    List<Point> prevLoc;
     Map<Integer, Set<Integer>> visited_set;
     Random gen;
     int id;
@@ -63,10 +61,7 @@ public class Player extends sail.sim.Player {
             double bias_y = bias.y * 4;
             initial = new Point(5 + bias_x, 5 + bias_y);
         }
-        prevLoc = new ArrayList<>();
-        path = new ArrayList<>();
         double speed = Simulator.getSpeed(initial, wind_direction);
-        prevLoc.add(0, initial);
         return initial;
     }
 
@@ -112,10 +107,17 @@ public class Player extends sail.sim.Player {
     }
 
     public Point findAngle(Point currentLoc, Point nextLoc, double dt) {
-        double min = 1e9;
+        double min = getTrueWeight(currentLoc, nextLoc);
         Point result = nextLoc;
-        for (int i = 20; i < 160; i++) {
+        double i = 20;
+        double change = 0.5;
+        if (dt < 0.005) {
+            if (targets.size() < 10) change = 1.5;
+            else if (targets.size() < 100) change = 1;
+        }
+        while (i < 160) {
             double angle = Math.PI * (i - 90) / 180;
+            i = i + change;
             Point direction = Point.getDirection(currentLoc, nextLoc);
             Point rotation = Point.rotateCounterClockwise(direction, angle);
             Point step = Point.multiply(rotation, dt);

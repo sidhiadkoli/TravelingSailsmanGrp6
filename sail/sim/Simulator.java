@@ -7,6 +7,7 @@ import java.awt.Desktop;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.net.*;
 import java.util.*;
 import java.util.stream.*;
@@ -25,11 +26,15 @@ public class Simulator {
   private static long gui_refresh;
   private static boolean gui_enabled, log;
   private static double DT = 0.015; // test?
+  private static boolean is_tournament = false;
 
   public static void main(String[] args) throws Exception {
       JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
       if(compiler == null) throw new IOException(":(");
     parseArgs(args);
+    if(is_tournament) {
+      System.out.print(t +", " + DT + ", "+total_time+", ");
+    }
     if(numgroups == -1 || t == -1) {
       throw new IllegalArgumentException("Missing groups or targets");
     }
@@ -101,6 +106,10 @@ public class Simulator {
     Player[] players, 
     Long seed
   ) throws Exception {
+    PrintStream original = System.out;
+    if(is_tournament)
+      System.setOut(new NullPrintStream());
+
     HTTPServer server = null;
     Random gen = new Random(seed);
     if (gui_enabled) {
@@ -144,12 +153,15 @@ public class Simulator {
           time_remaining[ii]
         );
         time_remaining[i] -= timers[i].getElapsedTime();
+        if(time_remaining[i] == 0) {
+          if(!is_tournament)
+            System.err.println("Player "+groups[i] + " timed out" );
+        }
         player_locations.add(p);
         initial_player_locations.add(p);
       } catch(TimeoutException ex) {
-        if(log) {
-          System.out.println("Player "+groups[i] + " timed out" );
-        }
+        if(!is_tournament)
+          System.err.println("Player "+groups[i] + " timed out" );
         time_remaining[i] = 0;
         ex.printStackTrace();
         initial_player_locations.add(new Point(0,0));
@@ -192,10 +204,14 @@ public class Simulator {
           return null;
         }, time_remaining[i]);
         time_remaining[i] -= timers[i].getElapsedTime();
-      } catch(TimeoutException ex) {
-        if(log) {
-          System.out.println("Player "+groups[i] + " timed out" );
+        if(time_remaining[i] == 0) {
+          if(!is_tournament)
+            System.err.println("Player "+groups[i] + " timed out" );
         }
+      } catch(TimeoutException ex) {
+        if(!is_tournament)
+          System.err.println("Player "+groups[i] + " timed out" );
+        
 
         time_remaining[i] = 0;
       } catch (Exception ex) {
@@ -235,6 +251,10 @@ public class Simulator {
           );
 
           time_remaining[i] -= timers[i].getElapsedTime();
+          if(time_remaining[i] == 0) {
+            if(!is_tournament)
+              System.err.println("Player "+groups[i] + " timed out" );
+          }
           if(newDirection.x == 0 && newDirection.y == 0) {
             newLocations.add(player_locations.get(i));
             continue;
@@ -250,8 +270,12 @@ public class Simulator {
           Point nextLocation = Point.sum(player_locations.get(i), distanceMoved);
           if (nextLocation.x < 0 || nextLocation.y > 10 || 
             nextLocation.y < 0 || nextLocation.x > 10) {
-            System.err.println("location returned is out of bounds group " + groups[ii]);
-            nextLocation = player_locations.get(i);
+            //System.err.println("location returned is out of bounds group " + groups[ii]);
+
+            nextLocation = getInterpolatedIntersectionLine(player_locations.get(i), nextLocation, 
+              nextLocation.x < 0? 0 : nextLocation.x > 10? 10: -1,
+              nextLocation.y < 0? 0 : nextLocation.y > 10? 10: -1);
+            
           }
           newLocations.add(nextLocation);
           //if(log) System.out.println(" from: ("+player_locations.get(i).x + ", " +
@@ -259,9 +283,9 @@ public class Simulator {
           // ", "+newLocations.get(i).y+")");
 
         } catch(TimeoutException ex) {
-          if(log) {
-            System.out.println("Player " + i + ": "+groups[i] + " timed out" );
-          }
+          if(!is_tournament)
+            System.err.println("Player " + i + ": "+groups[i] + " timed out" );
+          
           ex.printStackTrace();
           newLocations.add(player_locations.get(i));
           time_remaining[i] = 0;
@@ -335,11 +359,21 @@ public class Simulator {
               newLocations.get(i)
           )
         ) {
-          System.out.println("Finisher was "+groups[i]);
+          if(is_tournament) {
+            System.setOut(original);
+            System.out.print(groups[i]+", ");
+          }
+          else
+            System.out.println("Finisher was "+groups[i]);
           finished = true;
         }
       }
-      if(all_timed_out) {
+
+      if(!finished && all_timed_out) {
+        if(is_tournament) {
+          System.setOut(original);
+          System.out.print(",");
+        }
         finished = true;
       }
 
@@ -349,8 +383,9 @@ public class Simulator {
         player_locations.add(newLocations.get(i));
       }
       newLocations.clear();
+
       for(int i = 0 ; i < numgroups ; ++ i) {
-        if(time_remaining[i] <= 0) continue;
+        if(time_remaining[i] <= 0 || finished) continue;
         try {
           final int ii =i;
           timers[i].call((Callable<Void>) () -> {
@@ -358,11 +393,14 @@ public class Simulator {
             return null;
           }, time_remaining[i]);
           time_remaining[i] -= timers[i].getElapsedTime();
-
-        } catch(TimeoutException ex) {
-          if(log) {
-            System.out.println("Player " + i + ": "+groups[i] + " timed out" );
+          if(time_remaining[i] == 0) {
+            if(!is_tournament)
+              System.err.println("Player "+groups[i] + " timed out" );
           }
+        } catch(TimeoutException ex) {
+          if(!is_tournament)
+            System.err.println("Player " + i + ": "+groups[i] + " timed out" );
+          
           ex.printStackTrace();
           time_remaining[i] = 0;
         } catch (Exception ex) {
@@ -421,8 +459,13 @@ public class Simulator {
         break;
     }
     for(int j = 0 ; j < numgroups; ++ j) {
-      System.out.println(groups[j] + " scored " + scores[j]);
+      if(!is_tournament)
+        System.out.println(groups[j] + " scored " + scores[j]);
+      else {
+        System.out.print(scores[j]+", "+time_remaining[j]+", ");
+      }
     }
+    System.out.println();
     if(server != null) server.close();
   }
 
@@ -432,6 +475,30 @@ public class Simulator {
     Point p = getInterpolatedIntersectionPoint(t, a, b);
     if(p.x == -1 && p.y == -1) return false;
     else return true;
+  }
+
+  private static Point getInterpolatedIntersectionX(Point s, Point t, int x) {
+    //s + (t-s)m = x - s/ t - s
+    if(s.y == t.y) return new Point (x, s.y);
+    return new Point(x, s.y + (t.y - s.y) * (x - s.x) / (t.x - s.x));
+  }
+
+
+  private static Point getInterpolatedIntersectionY(Point s, Point t, int y) {
+    //s + (t-s)m = x - s/ t - s
+    if(s.x == t.x) return new Point (s.x, y);
+    return new Point(s.x + (t.x - s.x) * (y - s.y) / (t.y - s.y), y);
+  }
+
+  private static Point getInterpolatedIntersectionLine(Point s, Point t, int x, int y) {
+    Point p1 = getInterpolatedIntersectionY(s,t,y);
+    Point p2 = getInterpolatedIntersectionX(s,t,x);
+    // System.out.println(p1.x + ", " + p1.y);
+    // System.out.println(p2.x + ", " + p2.y);
+    if(y != -1 && (p1.x >= 0 && p1.x <= 10)) return p1;
+    if(x != -1 && p2.y >= 0 && p2.y <= 10) return p2;
+    System.err.println("Line segment interpolation math failed...");
+    return s;
   }
 
   // Ooh O(1), math is cooool
@@ -514,6 +581,8 @@ public class Simulator {
         gui_enabled = true;
       } else if (args[i].equals("--verbose")) {
         log = true;
+      } else if (args[i].equals("--tournament")) {
+        is_tournament = true;
       } else {
         throw new IllegalArgumentException("Unknown argument: " + args[i]);
       }
