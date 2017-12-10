@@ -1,36 +1,29 @@
 package sail.g6;
 
 import sail.sim.Point;
-import sail.sim.Simulator;
 import java.util.*;
 
 public class Player extends sail.sim.Player {
     List<Point> targets;
-    List<Point> path;
-    List<Point> prevLoc;
     Map<Integer, Set<Integer>> visited_set;
-    Random gen;
     int id;
     Point initial;
     Point wind;
     int nextTarget = -1;
 
-    // Oliver added these three attributes below. isVisited might be deprecated now.
-    int isVisited[][];
     int roundNumber = 0;
-    int cornerThreshold = 100;// if there are more points then this then we'll start in a corner.
-    int centerThreshold = 5; // If there are less than these many points, then we start closer to the center.
-    int tThreshold = 500; // Number of targets.
+    int cornerThreshold = 100;// if there are more points than this then we'll start in a corner.
+    int centerThreshold = 5; // If there are less than or equal to these many points, then we start closer to the center.
 
     @Override
     public Point chooseStartingLocation(Point wind_direction, Long seed, int t) {
-        // you don't have to use seed unless you want it to 
-        // be deterministic (wrt input randomness)
         wind = wind_direction;
 
         double eps = 1.0;
+        // 1. If <= 5 points: start 1km away from the center.
+        // 2. If >= 100 points: start 1km away from the edge.
+        // 3. Else: start at a point on the line perpendicular to the wind.
         if (t >= cornerThreshold) {
-            //System.out.println("Corner start");
             List<Point> fourCorners = new ArrayList<>();
             fourCorners.add(new Point(0 + eps, 0 + eps));
             fourCorners.add(new Point(0 + eps, 10 - eps));
@@ -56,7 +49,7 @@ public class Player extends sail.sim.Player {
 
             initial = cornerStart;
         } else if (t <= centerThreshold) {
-            Point bias = Point.rotateCounterClockwise(wind_direction, Math.PI / 2);
+            Point bias = Point.rotateCounterClockwise(wind_direction, - Math.PI / 2);
             initial = new Point(5 + bias.x, 5 + bias.y);
         } else {
             Point bias = Point.rotateCounterClockwise(wind_direction, Math.PI / 2);
@@ -64,10 +57,7 @@ public class Player extends sail.sim.Player {
             double bias_y = bias.y * 4;
             initial = new Point(5 + bias_x, 5 + bias_y);
         }
-        prevLoc = new ArrayList<>();
-        path = new ArrayList<>();
-        double speed = Simulator.getSpeed(initial, wind_direction);
-        prevLoc.add(0, initial);
+
         return initial;
     }
 
@@ -75,7 +65,6 @@ public class Player extends sail.sim.Player {
     public void init(List<Point> group_locations, List<Point> targets, int id) {
         this.targets = targets;
         this.id = id;
-        isVisited = new int[targets.size()][group_locations.size()];
     }
 
     @Override
@@ -84,12 +73,13 @@ public class Player extends sail.sim.Player {
             // This is if we have finished visiting all targets.
             nextTarget = targets.size();
             return findAngle(group_locations.get(id), initial, dt);
-        } else if ((targets.size() >= tThreshold || dt < 0.01) && visited_set != null && !visited_set.get(id).contains(nextTarget)) {
-            return findAngle(group_locations.get(id), targets.get(nextTarget), dt);
         }
         else {
             // Here is the logic to decide which target to head to next.
-            // Now we just consider the nearest target.
+            // We consider the nearest target to visit based on:
+            //   1. Wind direction.
+            //   2. Number of players that have already visited that point.
+            //   3. Actual distance of the target.
             double min = 1e9;
             int mark = 0;
             for (int i = 0; i < targets.size(); i++) {
@@ -113,11 +103,19 @@ public class Player extends sail.sim.Player {
         }
     }
 
+    // Find the best angle of traversal between the current point and the next point.
     public Point findAngle(Point currentLoc, Point nextLoc, double dt) {
-        double min = 1e9;
+        double min = getTrueWeight(currentLoc, nextLoc);
         Point result = nextLoc;
-        for (int i = 20; i < 160; i++) {
+        double i = 20;
+        double change = 0.5;
+        if (dt < 0.005) {
+            if (targets.size() < 10) change = 1.5;
+            else if (targets.size() < 100) change = 1;
+        }
+        while (i < 160) {
             double angle = Math.PI * (i - 90) / 180;
+            i = i + change;
             Point direction = Point.getDirection(currentLoc, nextLoc);
             Point rotation = Point.rotateCounterClockwise(direction, angle);
             Point step = Point.multiply(rotation, dt);
@@ -137,7 +135,7 @@ public class Player extends sail.sim.Player {
         return Point.getDirection(currentLoc, nextLoc);
     }
 
-    // Gets the distance between 2 points scaled by the wind direction.
+    // Gets the distance between 2 points scaled by the wind direction, i.e. time taken to move to next location.
     private double getTrueWeight(Point currentLoc, Point nextLoc) {
         double dist = Point.getNorm(Point.getDirection(currentLoc, nextLoc));
         double angle = Point.angleBetweenVectors(Point.getDirection(currentLoc, nextLoc), wind);
@@ -157,7 +155,6 @@ public class Player extends sail.sim.Player {
      */
     @Override
     public void onMoveFinished(List<Point> group_locations, Map<Integer, Set<Integer>> visited_set) {
-        // movementPredictionFileWrite(group_locations, visited_set);
         roundNumber += 1;
         this.visited_set = visited_set;
     }
