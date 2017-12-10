@@ -3,6 +3,8 @@ import numpy as np
 from collections import defaultdict
 import operator
 import pprint
+import numpy as np
+import pickle
 
 
 
@@ -12,6 +14,10 @@ def save_float(x):
     except ValueError:
         return None
 
+
+
+def dd():
+    return defaultdict(list)
 
 
 
@@ -30,6 +36,7 @@ def analyzeResults(resultsList, repetition):
     pp = pprint.PrettyPrinter(indent=4)
     playerPlacementsDict = defaultdict(int)
     payerScoreDict = defaultdict(int)
+    allScores = defaultdict(list)
     # pp.pprint(resultsList)
     for results in resultsList:
         sortedResults = sorted(results.items(), key=operator.itemgetter(1), reverse = True)
@@ -38,18 +45,28 @@ def analyzeResults(resultsList, repetition):
             score = playerTup[1]# this is not used rn
             # print(player)
             payerScoreDict[player] += score/repetition
+            allScores[player].append(score)
             if placement == 0:
                 playerPlacementsDict[player] += 1/repetition
             # playerPlacementsDict[player] += placement
         # pp.pprint(sortedResults)
+    plottingScoresDict = defaultdict(dd)
+    for player, score in allScores.items():
+        plottingScoresDict[player]['std'] = np.std(score)
+        plottingScoresDict[player]['avg'] = np.mean(score)
+        plottingScoresDict[player]['fracWins'] = playerPlacementsDict[player]
+    pickle.dump(plottingScoresDict, open( "player6Tourn.pkl", "wb" ) )
+
     print("*"*100)
     print("Placement scores")
     pp.pprint(dict(playerPlacementsDict))
     print("\n\n Average Score")
     pp.pprint(dict(payerScoreDict))
+    print('all tournament results')
+    pp.pprint(plottingScoresDict)
 
 
-repetition = 100
+repetition = 500
 
 
 
