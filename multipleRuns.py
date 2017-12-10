@@ -86,7 +86,7 @@ for run in range(repetition):
         # 1/0
     allResultsList[run] = dict(results)
 # print(allResultsList)
-print("N runs is {}\nwith scale {}".format(repetition, scale))
+print("N runs is {}".format(repetition))
 analyzeResults(resultsList = allResultsList, repetition = repetition)
 
 
