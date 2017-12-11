@@ -1,4 +1,4 @@
-g=6 g1 g2 g3 g4 g5 g6
+g=5 g6 g6a g6c g6e g6f
 fps=1000
 t=25
 frameskip=1
